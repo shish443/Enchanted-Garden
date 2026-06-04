@@ -1,4 +1,4 @@
-// Enchanted Garden/internal/config/config.go
+// Enchanted-Garden/internal/config/config.go
 package config
 
 import "os"
@@ -18,6 +18,6 @@ func Load() *Config {
 	if cfg.HTTP.Port == "" {
 		cfg.HTTP.Port = ":8080"
 	}
-	cfg.DB.DSN = os.Getenv("cfg.DB.DSN")
+	cfg.DB.DSN = os.Getenv("DATABASE_URL")
 	return cfg
 }
