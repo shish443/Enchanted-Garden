@@ -6,11 +6,7 @@ import (
 	"os"
 )
 
-// настраиваем вывод логов в консоль в красивом JSON
 func Init() {
 	handler := slog.NewJSONHandler(os.Stdout, nil)
-
-	// Делаем этот логгер главным для всего нашего проекта
-	mainLogger := slog.New(handler)
-	slog.SetDefault(mainLogger)
+	slog.SetDefault(slog.New(handler))
 }

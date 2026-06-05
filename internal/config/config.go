@@ -3,21 +3,32 @@ package config
 
 import "os"
 
+type HTTPConfig struct {
+	Port string
+}
+
+type DBConfig struct {
+	DSN string
+}
+
 type Config struct {
-	HTTP struct {
-		Port string
-	}
-	DB struct {
-		DSN string
-	}
+	HTTP HTTPConfig
+	DB   DBConfig
 }
 
 func Load() *Config {
-	cfg := &Config{}
-	cfg.HTTP.Port = os.Getenv("SERVER_PORT")
-	if cfg.HTTP.Port == "" {
-		cfg.HTTP.Port = ":8080"
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = ":8080"
 	}
-	cfg.DB.DSN = os.Getenv("DATABASE_URL")
-	return cfg
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/garden_db?sslmode=disable"
+	}
+
+	return &Config{
+		HTTP: HTTPConfig{Port: port},
+		DB:   DBConfig{DSN: dsn},
+	}
 }

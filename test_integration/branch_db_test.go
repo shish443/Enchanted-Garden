@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		t.Skip("Пропускаем тест, база сейчас недоступна: ", err)
+		t.Skip("database connection unavailable, skipping test: ", err)
 		return nil
 	}
 
@@ -40,36 +40,25 @@ func TestBranchRepository_FullLifeCycle(t *testing.T) {
 	repo := postgresRepo.NewBranchRepository(db)
 	ctx := context.Background()
 
-	// 1. Создание
 	testBranch := &model.Branch{
 		Name: "Тестовая Аллея",
 	}
-	err := repo.Create(ctx, testBranch)
-	// require.NoError сразу останавливает тест если есть ошибка
-	require.NoError(t, err)
-	// проверяем что база выдала нам нормальный айдишник (не ноль)
+	require.NoError(t, repo.Create(ctx, testBranch))
 	assert.NotEqual(t, 0, testBranch.ID)
 
-	// 2. Чтение
 	found, err := repo.GetByID(ctx, testBranch.ID, 1, false, "")
 	require.NoError(t, err)
 	assert.Equal(t, "Тестовая Аллея", found.Name)
 
-	// 3. Обновление
 	found.Name = "Магическая Аллея"
-	err = repo.Update(ctx, found)
-	require.NoError(t, err)
+	require.NoError(t, repo.Update(ctx, found))
 
 	updated, err := repo.GetByID(ctx, testBranch.ID, 1, false, "")
 	require.NoError(t, err)
 	assert.Equal(t, "Магическая Аллея", updated.Name)
 
-	// 4. Удаление
-	err = repo.DeleteCascade(ctx, testBranch.ID)
-	require.NoError(t, err)
+	require.NoError(t, repo.DeleteCascade(ctx, testBranch.ID))
 
-	// 5. Проверяем что ветки точно больше нет
 	_, err = repo.GetByID(ctx, testBranch.ID, 1, false, "")
-	// тут мы ПРЯМ ЖДЕМ ошибку, так как удалили ветку
 	require.Error(t, err)
 }

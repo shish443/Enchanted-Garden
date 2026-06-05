@@ -6,7 +6,6 @@ import (
 	"context"
 )
 
-// BranchRepository описывает работу с ветвями (департаментами) в базе данных
 type BranchRepository interface {
 	Create(ctx context.Context, branch *model.Branch) error
 	GetByID(ctx context.Context, id uint, depth int, includeEmployees bool, sortBy string) (*model.Branch, error)
@@ -17,7 +16,6 @@ type BranchRepository interface {
 	CheckCycle(ctx context.Context, id uint, newParentID uint) (bool, error)
 }
 
-// FloraRepository описывает работу с флорой (сотрудниками) в базе данных
 type FloraRepository interface {
 	Create(ctx context.Context, flora *model.Flora) error
 }

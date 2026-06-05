@@ -1,4 +1,4 @@
-// Enchanted-Garden/model/flora.go
+// Enchanted-Garden/internal/model/flora.go
 package model
 
 import (
@@ -14,6 +14,7 @@ type Flora struct {
 	HiredAt   *time.Time `gorm:"type:date" json:"hired_at"`
 	CreatedAt time.Time  `json:"created_at"`
 }
+
 type PlantFloraReq struct {
 	FullName string    `json:"full_name"`
 	HiredAt  *DateOnly `json:"hired_at"`
@@ -35,13 +36,9 @@ func (d *DateOnly) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// дата превращалась в красивую строку "Год-Месяц-День"
 func (d *DateOnly) MarshalJSON() ([]byte, error) {
 	if d == nil {
 		return []byte("null"), nil
 	}
-	t := time.Time(*d)
-	// Форматируем дату
-	formatted := `"` + t.Format("2006-01-02") + `"`
-	return []byte(formatted), nil
+	return []byte(`"` + time.Time(*d).Format("2006-01-02") + `"`), nil
 }

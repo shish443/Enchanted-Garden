@@ -1,4 +1,3 @@
-// Enchanted-Garden/internal/handler/flora.go
 package handler
 
 import (
@@ -22,49 +21,43 @@ func NewFloraHandler(s service.FloraService, b service.BranchService) *FloraHand
 }
 
 func (h *FloraHandler) Create(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Неверный ID ветви", http.StatusBadRequest)
+		http.Error(w, "invalid branch ID", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-
-	// Сначала проверяем, существует ли вообще такая ветка в саду
-	_, err = h.branchService.GetBranchByID(ctx, uint(id), 0, false, "")
-	if err != nil {
-		http.Error(w, "Ветка не найдена", http.StatusNotFound)
+	if _, err = h.branchService.GetBranchByID(ctx, uint(id), 0, false, ""); err != nil {
+		http.Error(w, "target branch not found", http.StatusNotFound)
 		return
 	}
 
 	var req model.PlantFloraReq
-	decoder := json.NewDecoder(r.Body)
-	err = decoder.Decode(&req)
-	if err != nil {
-		http.Error(w, "Неверный формат JSON", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
 	req.FullName = strings.TrimSpace(req.FullName)
 	if req.FullName == "" || utf8.RuneCountInString(req.FullName) > 200 {
-		http.Error(w, "Имя должно быть от 1 до 200 символов", http.StatusBadRequest)
+		http.Error(w, "full name must be between 1 and 200 characters", http.StatusBadRequest)
 		return
 	}
+
 	req.Position = strings.TrimSpace(req.Position)
 	if req.Position == "" || utf8.RuneCountInString(req.Position) > 200 {
-		http.Error(w, "Позиция должна быть от 1 до 200 символов", http.StatusBadRequest)
+		http.Error(w, "position must be between 1 and 200 characters", http.StatusBadRequest)
 		return
 	}
 
 	flora, err := h.service.CreateFlora(ctx, uint(id), &req)
 	if err != nil {
-		http.Error(w, "Ошибка при создании флоры: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to create flora: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	encoder := json.NewEncoder(w)
-	encoder.Encode(flora)
+	json.NewEncoder(w).Encode(flora)
 }

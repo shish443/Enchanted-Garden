@@ -30,8 +30,7 @@ func (s *floraService) CreateFlora(ctx context.Context, branchID uint, req *mode
 		HiredAt:  hiredAt,
 	}
 
-	err := s.repo.Create(ctx, f)
-	if err != nil {
+	if err := s.repo.Create(ctx, f); err != nil {
 		return nil, err
 	}
 	return f, nil

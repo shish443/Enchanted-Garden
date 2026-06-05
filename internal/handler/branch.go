@@ -1,4 +1,3 @@
-// Enchanted-Garden/internal/handler/branch.go
 package handler
 
 import (
@@ -23,16 +22,14 @@ func NewBranchHandler(s service.BranchService) *BranchHandler {
 
 func (h *BranchHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateBranchReq
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "неверный формат JSON: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
-	// Считаем именно символы, а не байты, чтобы кириллица не ломала длину
 	if req.Name == "" || utf8.RuneCountInString(req.Name) > 200 {
-		http.Error(w, "Имя не должно быть пустым или длиннее 200 символов", http.StatusBadRequest)
+		http.Error(w, "name cannot be empty or exceed 200 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -40,10 +37,10 @@ func (h *BranchHandler) Create(w http.ResponseWriter, r *http.Request) {
 	branch, err := h.service.CreateBranch(ctx, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
-			http.Error(w, "Ветка с таким именем уже существует у этого родителя", http.StatusBadRequest)
+			http.Error(w, "branch name already exists under this parent", http.StatusBadRequest)
 			return
 		}
-		http.Error(w, "Ошибка создания ветви: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to create branch: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -53,10 +50,9 @@ func (h *BranchHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BranchHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Неверный ID ветви", http.StatusBadRequest)
+		http.Error(w, "invalid branch ID", http.StatusBadRequest)
 		return
 	}
 
@@ -72,31 +68,25 @@ func (h *BranchHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		depth = 5
 	}
 
-	// Читаем из ссылки, нужно ли нам доставать сотрудников
-	queryParams := r.URL.Query()
-	includeEmployeesStr := queryParams.Get("include_employees")
-
 	includeEmployees := true
-	if includeEmployeesStr == "false" {
+	if r.URL.Query().Get("include_employees") == "false" {
 		includeEmployees = false
 	}
 
-	sortBy := r.URL.Query().Get("sort_by") // Читаем параметр из ссылки
+	sortBy := r.URL.Query().Get("sort_by")
 	if sortBy == "" {
-		sortBy = "created_at" // Ставим по умолчанию
+		sortBy = "created_at"
 	}
 
 	branch, err := h.service.GetBranchByID(r.Context(), uint(id), depth, includeEmployees, sortBy)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, `{"error": "Ветвь не найдена"}`, http.StatusNotFound)
+			http.Error(w, `{"error": "branch not found"}`, http.StatusNotFound)
 			return
 		}
 
-		// Пишем реальную ошибку в консоль для себя
-		slog.Error("Ошибка получения ветви", "error", err)
-		// Клиенту отдаем безопасный текст без деталей базы данных
-		http.Error(w, `{"error": "Внутренняя ошибка сервера"}`, http.StatusInternalServerError)
+		slog.Error("failed to get branch", "error", err)
+		http.Error(w, `{"error": "internal server error"}`, http.StatusInternalServerError)
 		return
 	}
 
@@ -105,56 +95,49 @@ func (h *BranchHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BranchHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Неверный ID ветви", http.StatusBadRequest)
+		http.Error(w, "invalid branch ID", http.StatusBadRequest)
 		return
 	}
 
 	var req model.UpdateBranchReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Неверный формат JSON", http.StatusBadRequest)
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
 
 	if req.Name != nil {
 		trimmed := strings.TrimSpace(*req.Name)
 		if trimmed == "" || utf8.RuneCountInString(trimmed) > 200 {
-			http.Error(w, "Имя ветви не должно быть пустым или длиннее 200 символов", http.StatusBadRequest)
+			http.Error(w, "branch name cannot be empty or exceed 200 characters", http.StatusBadRequest)
 			return
 		}
 		req.Name = &trimmed
 	}
 
-	// Если parent_id вообще прислали в JSON
 	if req.ParentID != nil {
-		// Если прислали конкретное число, а не null
-		if *req.ParentID != nil {
-			// Достаем само число из двойного указателя
-			if **req.ParentID == uint(id) {
-				http.Error(w, "Ветвь не может быть родителем самой себя", http.StatusBadRequest)
-				return
-			}
+		if *req.ParentID == uint(id) {
+			http.Error(w, "branch cannot be a parent of itself", http.StatusBadRequest)
+			return
 		}
 	}
 
 	branch, err := h.service.UpdateBranch(r.Context(), uint(id), &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "Ветвь не найдена", http.StatusNotFound)
+			http.Error(w, "branch not found", http.StatusNotFound)
 			return
 		}
-
 		if strings.Contains(err.Error(), "unique") {
-			http.Error(w, "Ветка с таким именем уже существует у этого родителя", http.StatusBadRequest)
+			http.Error(w, "branch name already exists under this parent", http.StatusBadRequest)
 			return
 		}
 		if strings.Contains(err.Error(), "cycle") {
-			http.Error(w, "Нельзя переместить ветвь внутрь своего поддерева (цикл)", http.StatusConflict)
+			http.Error(w, "circular dependency detected: cannot move branch under its own subtree", http.StatusConflict)
 			return
 		}
-		http.Error(w, "Ошибка обновления ветви: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to update branch: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -163,16 +146,15 @@ func (h *BranchHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BranchHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Неверный ID ветви", http.StatusBadRequest)
+		http.Error(w, "invalid branch ID", http.StatusBadRequest)
 		return
 	}
 
 	mode := r.URL.Query().Get("mode")
 	if mode != "cascade" && mode != "reassign" {
-		http.Error(w, "параметр mode должен быть 'cascade' или 'reassign'", http.StatusBadRequest)
+		http.Error(w, "mode parameter must be 'cascade' or 'reassign'", http.StatusBadRequest)
 		return
 	}
 
@@ -180,36 +162,33 @@ func (h *BranchHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if mode == "reassign" {
 		reassignStr := r.URL.Query().Get("reassign_to_department_id")
 		if reassignStr == "" {
-			http.Error(w, "Для режима 'reassign' параметр reassign_to_department_id обязателен", http.StatusBadRequest)
+			http.Error(w, "reassign_to_department_id is required when mode is 'reassign'", http.StatusBadRequest)
 			return
 		}
 		reassignTo, err := strconv.ParseUint(reassignStr, 10, 64)
 		if err != nil {
-			http.Error(w, "Неверный ID ветви для переназначения флоры", http.StatusBadRequest)
+			http.Error(w, "invalid reassign branch ID", http.StatusBadRequest)
 			return
 		}
 		reassignToID = uint(reassignTo)
 
 		if reassignToID == uint(id) {
-			http.Error(w, "Нельзя переназначить флору в удаляемую ветвь", http.StatusBadRequest)
+			http.Error(w, "cannot reassign entities to the branch being deleted", http.StatusBadRequest)
 			return
 		}
 
-		_, err = h.service.GetBranchByID(r.Context(), reassignToID, 1, false, "")
-		if err != nil {
-			// Если произошла ошибка (ветки нет), сразу ругаемся и останавливаем работу
-			http.Error(w, "Ветка для пересадки флоры не найдена в саду", http.StatusNotFound)
+		if _, err = h.service.GetBranchByID(r.Context(), reassignToID, 1, false, ""); err != nil {
+			http.Error(w, "target reassignment branch not found", http.StatusNotFound)
 			return
 		}
 	}
 
-	err = h.service.DeleteBranch(r.Context(), uint(id), mode, reassignToID)
-	if err != nil {
+	if err = h.service.DeleteBranch(r.Context(), uint(id), mode, reassignToID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "Ветвь не найдена", http.StatusNotFound)
+			http.Error(w, "branch not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "Ошибка при удалении ветви: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to delete branch: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

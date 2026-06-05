@@ -24,35 +24,32 @@ import (
 
 func main() {
 	logger.Init()
-	slog.Info("Запускаем наш сад")
+	slog.Info("starting application")
 
 	cfg := config.Load()
 
 	db, err := gorm.Open(gormpostgres.Open(cfg.DB.DSN), &gorm.Config{})
 	if err != nil {
-		slog.Error("Не смогли подключиться к базе", "error", err)
+		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("База данных подключена")
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		slog.Error("Не смогли получить sql.DB из GORM", "error", err)
+		slog.Error("failed to get sql.DB", "error", err)
 		os.Exit(1)
 	}
 
-	err = goose.SetDialect("postgres")
-	if err != nil {
-		slog.Error("Не смогли настроить goose на работу с postgres", "error", err)
+	if err := goose.SetDialect("postgres"); err != nil {
+		slog.Error("failed to set goose dialect", "error", err)
 		os.Exit(1)
 	}
 
-	err = goose.Up(sqlDB, "db/migrations")
-	if err != nil {
-		slog.Error("Ошибка во время выполнения миграций", "error", err)
+	if err := goose.Up(sqlDB, "db/migrations"); err != nil {
+		slog.Error("failed to run migrations", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("Миграции успешно применены!")
+	slog.Info("database migrations applied successfully")
 
 	branchRepo := postgres.NewBranchRepository(db)
 	floraRepo := postgres.NewFloraRepository(db)
@@ -64,42 +61,39 @@ func main() {
 	floraHandler := handler.NewFloraHandler(floraService, branchService)
 
 	router := handler.SetupRouter(branchHandler, floraHandler)
-
 	router.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("pong"))
 	})
 
-	// создаем сервер руками, чтобы им можно было управлять
 	srv := &http.Server{
 		Addr:    cfg.HTTP.Port,
 		Handler: router,
 	}
 
-	// запускаем сервер в фоне, чтобы код пошел дальше
 	go func() {
-		slog.Info("Сервер слушает порт " + cfg.HTTP.Port)
+		slog.Info("http server started", "port", cfg.HTTP.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Сервер упал", "error", err)
+			slog.Error("http server failed", "error", err)
 		}
 	}()
 
-	// ждем когда нажмут ctrl+c
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop // тут программа зависает и ждет сигнал
+	<-stop
 
-	slog.Info("Выключаем сервер...")
+	slog.Info("shutting down server...")
 
-	// даем 5 секунд на завершение того что уже начало работать
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Ошибка выключения", "error", err)
+		slog.Error("server forced to shutdown", "error", err)
 	}
-	slog.Info("Закрываем соединения с базой данных...")
+
 	if err := sqlDB.Close(); err != nil {
-		slog.Error("Ошибка при закрытии БД", "error", err)
+		slog.Error("failed to close database connection", "error", err)
 	}
-	slog.Info("Всё остановлено")
+
+	slog.Info("application stopped completely")
 }

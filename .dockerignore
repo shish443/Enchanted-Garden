@@ -1,0 +1,4 @@
+#Enchanted-Garden/.dockerignore
+.git
+*.md
+test_integration/

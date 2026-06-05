@@ -19,5 +19,5 @@ type CreateBranchReq struct {
 
 type UpdateBranchReq struct {
 	Name     *string `json:"name"`
-	ParentID **uint  `json:"parent_id"`
+	ParentID *uint   `json:"parent_id"`
 }
